@@ -9,7 +9,7 @@ pipeline {
         IMAGE_NAME = "sample-ci-app"
         AWS_REGION = "ap-southeast-2"
         ECR_REPOSITORY = "sample-ci-app"
-        GIT_BRANCH_NAME = "mockproject-ecr"
+        GIT_BRANCH_NAME = "main"
         GIT_MANIFEST = "k8s/deployment.yaml"
     }
 
@@ -143,7 +143,7 @@ pipeline {
     steps {
         withCredentials([
             usernamePassword(
-                credentialsId: 'github-ci-cd-credentials laptop',
+                credentialsId: 'github-hybrid-cicd-credentials',
                 usernameVariable: 'GIT_USER',
                 passwordVariable: 'GIT_TOKEN'
             ),
@@ -184,7 +184,7 @@ pipeline {
                       -m "Update sample-ci-app to build $BUILD_NUMBER [skip ci]"
 
                     git push \
-                      "https://${GIT_USER}:${GIT_TOKEN}@github.com/hungdoan42304/CI-CD-test-laptop.git" \
+                      "https://${GIT_USER}:${GIT_TOKEN}@github.com/hungdoan42304/hybrid-cicd-mock-project.git" \
                       HEAD:$GIT_BRANCH_NAME
                 fi
             '''
