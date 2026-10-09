@@ -17,6 +17,8 @@ spec:
         app: sample-ci-app
 
     spec:
+      imagePullSecrets:
+        - name: ecr-pull-secret
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
