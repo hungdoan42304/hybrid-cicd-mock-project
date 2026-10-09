@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+ARG BUILD_NUMBER=local
+ENV APP_VERSION=${BUILD_NUMBER}
+
 COPY package*.json ./
 RUN npm install --omit=dev
 

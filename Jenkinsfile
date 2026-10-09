@@ -84,6 +84,7 @@ pipeline {
             steps {
                 sh '''
                     docker build \
+		      --build-arg BUILD_NUMBER=$BUILD_NUMBER \
                       -t $IMAGE_NAME:$BUILD_NUMBER .
                 '''
             }
