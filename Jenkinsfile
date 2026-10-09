@@ -192,8 +192,96 @@ pipeline {
     }
 }
 
-    }
 
+        stage('Refresh ECR Pull Secret') {
+            when {
+                expression {
+                    env.SKIP_CI != 'true'
+                }
+            }
+
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'aws-access-key-id',
+                        variable: 'AWS_ACCESS_KEY_ID'
+                    ),
+                    string(
+                        credentialsId: 'aws-secret-access-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'
+                    ),
+                    file(
+                        credentialsId: 'k8s-vmware-deployer',
+                        variable: 'KUBECONFIG'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+                        umask 077
+
+                        ECR_REGISTRY=$(aws ecr describe-repositories \
+                          --repository-names "$ECR_REPOSITORY" \
+                          --region "$AWS_REGION" \
+                          --query 'repositories[0].repositoryUri' \
+                          --output text | cut -d/ -f1)
+
+                        ECR_PASSWORD="$(aws ecr get-login-password \
+                          --region "$AWS_REGION")"
+
+                        kubectl create secret docker-registry ecr-pull-secret \
+                          --namespace=cicd-lab \
+                          --docker-server="$ECR_REGISTRY" \
+                          --docker-username=AWS \
+                          --docker-password="$ECR_PASSWORD" \
+                          --dry-run=client \
+                          -o json | kubectl replace -f -
+
+                        unset ECR_PASSWORD
+
+                        echo "PASS: ECR pull secret refreshed"
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Kubernetes') {
+            when {
+                expression {
+                    env.SKIP_CI != 'true'
+                }
+            }
+
+            steps {
+                withCredentials([
+                    file(
+                        credentialsId: 'k8s-vmware-deployer',
+                        variable: 'KUBECONFIG'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        echo "Deploying build $BUILD_NUMBER to Kubernetes VMware"
+
+                        kubectl apply -n cicd-lab -f "$GIT_MANIFEST"
+
+                        kubectl rollout status \
+                          deployment/sample-ci-app \
+                          -n cicd-lab \
+                          --timeout=180s
+
+                        kubectl get pods \
+                          -n cicd-lab \
+                          -l app=sample-ci-app \
+                          -o wide
+
+                        echo "PASS: Kubernetes deployment completed"
+                    '''
+                }
+            }
+        }
+    }
 
     post {
         success {
