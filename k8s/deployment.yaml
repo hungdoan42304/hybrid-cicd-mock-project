@@ -39,7 +39,7 @@ spec:
 
       containers:
         - name: sample-ci-app
-          image: 510869689558.dkr.ecr.ap-southeast-2.amazonaws.com/sample-ci-app:27
+          image: 510869689558.dkr.ecr.ap-southeast-2.amazonaws.com/sample-ci-app:29
           imagePullPolicy: Always
 
           ports:
