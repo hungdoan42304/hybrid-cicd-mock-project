@@ -65,7 +65,7 @@ app.get("/", (req, res) => {
 </head>
 <body>
   <div class="dashboard">
-    <h1>🚀 Hybrid CI/CD Dashboard</h1>
+    <h1>🚀 Hybrid CI/CD Dashboard - E2E TEST</h1>
     <p class="subtitle">
       GitHub → Jenkins → Amazon ECR → Kubernetes
     </p>
