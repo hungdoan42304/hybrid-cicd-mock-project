@@ -141,7 +141,7 @@ pipeline {
         }
     }
 
-    steps {
+            steps {
         withCredentials([
             usernamePassword(
                 credentialsId: 'github-hybrid-cicd-credentials',
@@ -158,7 +158,27 @@ pipeline {
             )
         ]) {
             sh '''
-                set -e
+                set -eu
+                set +x
+                umask 077
+
+                GIT_URL="https://github.com/hungdoan42304/hybrid-cicd-mock-project.git"
+
+                ASKPASS_SCRIPT="$(mktemp)"
+                trap 'rm -f "$ASKPASS_SCRIPT"' EXIT
+
+                cat > "$ASKPASS_SCRIPT" <<'EOF'
+#!/bin/sh
+case "$1" in
+    *Username*) printf '%s\\n' "$GIT_USER" ;;
+    *Password*) printf '%s\\n' "$GIT_TOKEN" ;;
+    *) exit 1 ;;
+esac
+EOF
+
+                chmod 700 "$ASKPASS_SCRIPT"
+                export GIT_ASKPASS="$ASKPASS_SCRIPT"
+                export GIT_TERMINAL_PROMPT=0
 
                 ECR_URI=$(aws ecr describe-repositories \
                   --repository-names "$ECR_REPOSITORY" \
@@ -166,28 +186,80 @@ pipeline {
                   --query 'repositories[0].repositoryUri' \
                   --output text)
 
-                sed -i \
-                  "s|^[[:space:]]*image: .*|          image: $ECR_URI:$BUILD_NUMBER|" \
-                  "$GIT_MANIFEST"
-
-                echo "Updated manifest:"
-                grep "image:" "$GIT_MANIFEST"
-
                 git config user.name "Jenkins CI"
                 git config user.email "jenkins@lab.local"
 
-                git add "$GIT_MANIFEST"
+                # Đồng bộ Git trước khi sửa manifest.
+                git fetch "$GIT_URL" "$GIT_BRANCH_NAME"
 
-                if git diff --cached --quiet; then
-                    echo "No manifest change detected."
-                else
+                # Workspace phải sạch trước khi đồng bộ.
+                if ! git diff --quiet || ! git diff --cached --quiet; then
+                    echo "ERROR: Git workspace contains uncommitted changes."
+                    exit 1
+                fi
+
+                # Checkout đúng commit mới nhất của GitHub.
+                git checkout --detach FETCH_HEAD
+
+                # Retry nếu remote thay đổi trong lúc push.
+                SUCCESS=0
+
+                for ATTEMPT in 1 2 3; do
+                    echo "GitOps attempt $ATTEMPT/3"
+
+                    # Bắt đầu lại từ trạng thái remote mới nhất.
+                    git fetch "$GIT_URL" "$GIT_BRANCH_NAME"
+                    git reset --hard FETCH_HEAD
+
+		    # Chỉ cập nhật image thuộc container sample-ci-app.
+awk -v image="$ECR_URI:$BUILD_NUMBER" '
+    /^[[:space:]]*-[[:space:]]*name:[[:space:]]*sample-ci-app[[:space:]]*$/ {
+        target=1
+        print
+        next
+    }
+
+    target && /^[[:space:]]*image:[[:space:]]*/ {
+        sub(/image:.*/, "image: " image)
+        target=0
+        updated++
+    }
+
+    { print }
+
+    END {
+        if (updated != 1) {
+            exit 1
+        }
+    }
+' "$GIT_MANIFEST" > "$GIT_MANIFEST.tmp"
+
+mv "$GIT_MANIFEST.tmp" "$GIT_MANIFEST"
+                    git add "$GIT_MANIFEST"
+
+                    if git diff --cached --quiet; then
+                        echo "No manifest change detected."
+                        SUCCESS=1
+                        break
+                    fi
+
                     git commit \
                       -m "Update sample-ci-app to build $BUILD_NUMBER [skip ci]"
 
-                    git push \
-                      "https://${GIT_USER}:${GIT_TOKEN}@github.com/hungdoan42304/hybrid-cicd-mock-project.git" \
-                      HEAD:$GIT_BRANCH_NAME
+                    if git push "$GIT_URL" "HEAD:refs/heads/$GIT_BRANCH_NAME"; then
+                        SUCCESS=1
+                        break
+                    fi
+
+                    echo "Git push rejected. Fetching latest revision..."
+                done
+
+                if [ "$SUCCESS" -ne 1 ]; then
+                    echo "ERROR: GitOps push failed after 3 attempts."
+                    exit 1
                 fi
+
+                echo "PASS: GitOps manifest updated."
             '''
         }
     }
