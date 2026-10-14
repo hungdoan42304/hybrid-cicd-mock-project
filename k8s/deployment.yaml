@@ -82,3 +82,5 @@ spec:
               cpu: "200m"
               memory: "128Mi"
               ephemeral-storage: "500Mi"
+
+# Jenkins SCM polling path exclusion test
