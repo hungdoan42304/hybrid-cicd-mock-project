@@ -9,7 +9,7 @@ pipeline {
         IMAGE_NAME = "sample-ci-app"
         AWS_REGION = "ap-southeast-2"
         ECR_REPOSITORY = "sample-ci-app"
-        GIT_BRANCH_NAME = "main"
+        GIT_BRANCH_NAME = "gitops"
         GIT_MANIFEST = "k8s/deployment.yaml"
     }
 
